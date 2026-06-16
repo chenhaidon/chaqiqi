@@ -41,59 +41,37 @@ QCC_SECRET_KEY=你的SecretKey
 
 3. 重启 `npm run dev`
 
-## 腾讯云服务器一键部署
+## Docker Compose 一键部署
 
 推荐部署目标：**腾讯云 CVM / 轻量应用服务器（Ubuntu 22.04）**。
 
-当前项目使用 SQLite 本地文件 `data/app.db` 存储评论、缓存和账号数据，因此推荐使用：
-- Node.js 20
-- PM2 托管 `next start`
-- Nginx 反向代理
-- 宿主机持久化 `data/` 目录
+当前项目默认推荐使用 **Docker Compose + Nginx + SQLite 持久卷** 部署。
 
 ### 1. 准备服务器
 
-先把域名解析到腾讯云服务器，并确保安全组已放行：
-- `22`（SSH）
-- `80`（HTTP）
-- `443`（HTTPS）
+先确保服务器已安装：
+- Docker
+- Docker Compose Plugin
 
-然后把仓库放到服务器，例如：
+如果还没安装，可在 Ubuntu 上执行：
 
 ```bash
-git clone <你的仓库地址> /srv/chaqiqi
+sudo apt update
+sudo apt install -y docker.io docker-compose-plugin
+sudo systemctl enable docker
+sudo systemctl start docker
+```
+
+然后把仓库拉到服务器：
+
+```bash
+git clone https://github.com/chenhaidon/chaqiqi.git /srv/chaqiqi
 cd /srv/chaqiqi
 ```
 
-### 2. 初始化服务器环境
+### 2. 配置生产环境变量
 
-项目已自带初始化脚本：
-
-```bash
-APP_DIR=/srv/chaqiqi DOMAIN=your-domain.com bash scripts/setup-server.sh
-```
-
-这个脚本会：
-- 安装 Node.js 20
-- 安装 PM2
-- 安装 Nginx
-- 写入并启用站点配置
-
-如需安装 HTTPS 证书工具：
-
-```bash
-APP_DIR=/srv/chaqiqi DOMAIN=your-domain.com INSTALL_CERTBOT=true bash scripts/setup-server.sh
-```
-
-之后可执行：
-
-```bash
-sudo certbot --nginx -d your-domain.com
-```
-
-### 3. 配置生产环境变量
-
-复制生产示例文件：
+复制生产环境变量模板：
 
 ```bash
 cp .env.production.example .env.production
@@ -121,25 +99,123 @@ ENABLE_QCC_DEBUG_API=false
 说明：
 - `APP_BASE_URL` 必须是正式访问域名，否则注册/重置密码邮件里的链接会指向错误地址
 - 生产环境默认不要开启 `ENABLE_QCC_DEBUG_API`
+- `.env.production` 不要提交到 Git
 
-### 4. 一键部署应用
+### 3. 一键构建并启动
 
-执行：
+```bash
+docker compose build
+docker compose up -d
+```
+
+启动后：
+- `app` 容器运行 Next.js 服务
+- `nginx` 容器监听 `80` 端口并反代到 `app:3000`
+- `chaqiqi_data` 命名卷负责持久化 `/app/data`
+
+### 4. 常用 Docker 运维命令
+
+```bash
+docker compose ps
+docker compose logs -f
+docker compose logs -f app
+docker compose logs -f nginx
+docker compose restart
+docker compose down
+docker compose up -d
+```
+
+### 5. 更新部署
+
+```bash
+cd /srv/chaqiqi
+git pull
+docker compose build
+docker compose up -d
+```
+
+如果要强制重新构建：
+
+```bash
+docker compose build --no-cache
+docker compose up -d
+```
+
+### 6. SQLite 数据持久化说明
+
+数据库位于容器内：
+
+```bash
+/app/data/app.db
+```
+
+通过 `docker-compose.yml` 中的命名卷 `chaqiqi_data` 持久化。
+
+重要说明：
+- `docker compose down` **不会删除数据卷**
+- 如果你手动执行 `docker compose down -v`，会连同数据库一起删除
+- SQLite 启用了 WAL 模式，相关文件包括：
+  - `app.db`
+  - `app.db-wal`
+  - `app.db-shm`
+
+### 7. 访问验证
+
+启动完成后，直接访问：
+
+```text
+http://你的服务器IP
+```
+
+如果你已经有域名并解析到服务器，也可以直接访问域名。
+
+### 8. 生产 HTTPS
+
+当前 Docker 版默认先走 HTTP + Nginx 容器反代。
+
+如果你后续要接 HTTPS，建议两种方式二选一：
+- 宿主机层处理证书并反代到 Docker
+- 继续扩展 Nginx 容器挂载证书文件
+
+## 传统 VM 部署（非 Docker）
+
+如果你不想使用 Docker，也保留了 **Node.js + PM2 + Nginx** 的传统部署方案。
+
+### 1. 准备服务器
+
+先把域名解析到腾讯云服务器，并确保安全组已放行：
+- `22`（SSH）
+- `80`（HTTP）
+- `443`（HTTPS）
+
+然后把仓库放到服务器，例如：
+
+```bash
+git clone https://github.com/chenhaidon/chaqiqi.git /srv/chaqiqi
+cd /srv/chaqiqi
+```
+
+### 2. 初始化服务器环境
+
+项目已自带初始化脚本：
+
+```bash
+APP_DIR=/srv/chaqiqi DOMAIN=your-domain.com bash scripts/setup-server.sh
+```
+
+### 3. 配置生产环境变量
+
+```bash
+cp .env.production.example .env.production
+```
+
+填好 QCC / SMTP / `APP_BASE_URL` 等变量后，执行：
 
 ```bash
 APP_DIR=/srv/chaqiqi bash scripts/deploy.sh
 ```
 
-这个脚本会自动：
-- 校验 Node / npm / PM2
-- 校验 `.env.production`
-- 创建 `data/` 目录
-- 安装依赖 `npm ci`
-- 执行 `npm run build`
-- 用 PM2 启动或重载应用
-- 本机健康检查 `http://127.0.0.1:3000`
-
-### 5. 常用运维命令
+### 4. 常用运维命令
 
 ```bash
 pm2 status
@@ -149,35 +225,6 @@ pm2 save
 curl http://127.0.0.1:3000
 sudo nginx -t
 sudo systemctl reload nginx
-```
-
-### 6. 更新部署
-
-服务器上拉取新代码后，重新执行：
-
-```bash
-cd /srv/chaqiqi
-git pull
-APP_DIR=/srv/chaqiqi bash scripts/deploy.sh
-```
-
-### 7. SQLite 数据备份
-
-数据库文件位于：
-
-```bash
-data/app.db
-```
-
-由于启用了 WAL 模式，备份时建议一并处理相关文件：
-- `data/app.db`
-- `data/app.db-wal`
-- `data/app.db-shm`
-
-简单备份示例：
-
-```bash
-tar -czf chaqiqi-data-backup.tar.gz data/
 ```
 
 ## 字段映射说明
@@ -192,7 +239,7 @@ tar -czf chaqiqi-data-backup.tar.gz data/
 
 ## 目录结构
 
-```
+```text
 src/
   app/
     page.tsx                       首页(搜索框)

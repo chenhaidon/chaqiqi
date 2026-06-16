@@ -1,0 +1,32 @@
+name: chaqiqi
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chaqiqi-app
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    expose:
+      - "3000"
+    volumes:
+      - chaqiqi_data:/app/data
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: chaqiqi-nginx
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+
+volumes:
+  chaqiqi_data:
