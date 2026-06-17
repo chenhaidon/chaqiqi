@@ -1,18 +1,22 @@
-# syntax=docker/dockerfile:1
-
-FROM node:20-bookworm-slim AS deps
+FROM docker.m.daocloud.io/library/node:20-bookworm-slim AS base
 WORKDIR /app
+
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+
+
+FROM base AS deps
 COPY package.json package-lock.json ./
 RUN npm ci
 
-FROM node:20-bookworm-slim AS builder
-WORKDIR /app
+FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-FROM node:20-bookworm-slim AS runner
-WORKDIR /app
+FROM base AS runner
 ENV NODE_ENV=production
 ENV PORT=3000
 COPY --from=builder /app/package.json ./package.json

@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import { Comment, RatingSummary } from "./types";
+import { createPendingCommentImages, listApprovedCommentImagesByCommentIds } from "./images";
 
 export function listComments(companyId: string): Comment[] {
   const db = getDb();
@@ -8,7 +9,8 @@ export function listComments(companyId: string): Comment[] {
       "SELECT id, company_id as companyId, author, rating, content, created_at as createdAt FROM comments WHERE company_id = ? ORDER BY id DESC"
     )
     .all(companyId) as Comment[];
-  return rows;
+  const imageMap = listApprovedCommentImagesByCommentIds(rows.map((row) => row.id));
+  return rows.map((row) => ({ ...row, images: imageMap[row.id] || [] }));
 }
 
 export function getRatingSummary(companyId: string): RatingSummary {
@@ -41,4 +43,19 @@ export function addComment(
       "SELECT id, company_id as companyId, author, rating, content, created_at as createdAt FROM comments WHERE id = ?"
     )
     .get(info.lastInsertRowid) as Comment;
+}
+
+export function addCommentWithImages(
+  companyId: string,
+  author: string,
+  rating: number,
+  content: string,
+  uploaderUserId: string,
+  files: Array<{ fileUrl: string; mimeType: string; fileSize: number }>
+): Comment {
+  const comment = addComment(companyId, author, rating, content);
+  if (files.length > 0) {
+    createPendingCommentImages(comment.id, companyId, uploaderUserId, files);
+  }
+  return { ...comment, images: [] };
 }

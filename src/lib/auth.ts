@@ -14,7 +14,7 @@ import {
 import type { User } from "./types";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
-const EMAIL_TOKEN_TTL_MS = 1000 * 60 * 10;
+const EMAIL_TOKEN_TTL_MS = 1000 * 60 * 5;
 const RESET_TOKEN_TTL_MS = 1000 * 60 * 30;
 
 function hashText(value: string): string {
@@ -56,14 +56,22 @@ export function createOpaqueToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
-export function createEmailVerification(userId: string): string {
-  const token = createOpaqueToken();
-  saveEmailVerificationToken(userId, hashText(token), Date.now() + EMAIL_TOKEN_TTL_MS);
-  return token;
+function createEmailCode(): string {
+  return crypto.randomInt(0, 1000000).toString().padStart(6, "0");
 }
 
-export function verifyEmailToken(token: string): User | null {
-  const record = consumeEmailVerificationToken(hashText(token));
+export function createEmailVerification(userId: string): string {
+  const code = createEmailCode();
+  saveEmailVerificationToken(userId, hashText(code), Date.now() + EMAIL_TOKEN_TTL_MS);
+  return code;
+}
+
+export function verifyEmailCode(email: string, code: string): User | null {
+  const normalizedEmail = normalizeEmail(email);
+  if (!/^\d{6}$/.test(code)) return null;
+  const user = getUserByEmail(normalizedEmail);
+  if (!user) return null;
+  const record = consumeEmailVerificationToken(user.id, hashText(code.trim()));
   if (!record || record.expiresAt < Date.now()) return null;
   markUserEmailVerified(record.userId);
   return getUserById(record.userId);

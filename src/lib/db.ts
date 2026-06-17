@@ -12,6 +12,13 @@ declare global {
   var __chaqiqi_db: Database.Database | undefined;
 }
 
+function ensureUserColumn(db: Database.Database, columnName: string, definition: string) {
+  const columns = db.prepare(`PRAGMA table_info(users)`).all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === columnName)) {
+    db.exec(`ALTER TABLE users ADD COLUMN ${columnName} ${definition}`);
+  }
+}
+
 function init(): Database.Database {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -69,6 +76,8 @@ function init(): Database.Database {
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
+      nickname TEXT NOT NULL DEFAULT '',
+      avatar_url TEXT NOT NULL DEFAULT '',
       password_hash TEXT NOT NULL,
       email_verified INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
@@ -104,7 +113,44 @@ function init(): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_password_reset_user ON password_reset_tokens(user_id);
     CREATE INDEX IF NOT EXISTS idx_password_reset_expires ON password_reset_tokens(expires_at);
+
+    CREATE TABLE IF NOT EXISTS company_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id TEXT NOT NULL,
+      uploader_user_id TEXT NOT NULL,
+      file_url TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      file_size INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      review_reason TEXT NOT NULL DEFAULT '',
+      reviewed_by_user_id TEXT NOT NULL DEFAULT '',
+      reviewed_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_company_images_company_status ON company_images(company_id, status);
+    CREATE INDEX IF NOT EXISTS idx_company_images_status_created ON company_images(status, created_at);
+
+    CREATE TABLE IF NOT EXISTS comment_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      comment_id INTEGER NOT NULL,
+      company_id TEXT NOT NULL,
+      uploader_user_id TEXT NOT NULL,
+      file_url TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      file_size INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      review_reason TEXT NOT NULL DEFAULT '',
+      reviewed_by_user_id TEXT NOT NULL DEFAULT '',
+      reviewed_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_comment_images_comment_status ON comment_images(comment_id, status);
+    CREATE INDEX IF NOT EXISTS idx_comment_images_company_status ON comment_images(company_id, status);
+    CREATE INDEX IF NOT EXISTS idx_comment_images_status_created ON comment_images(status, created_at);
   `);
+
+  ensureUserColumn(db, "nickname", "TEXT NOT NULL DEFAULT ''");
+  ensureUserColumn(db, "avatar_url", "TEXT NOT NULL DEFAULT ''");
 
   return db;
 }

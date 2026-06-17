@@ -37,15 +37,28 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "该邮箱已注册" }, { status: 409 });
       }
       refreshUnverifiedUser(existingUser.id, hashPassword(password));
-      const token = createEmailVerification(existingUser.id);
-      await sendVerificationEmail(existingUser.email, token);
-      return NextResponse.json({ ok: true, message: "该邮箱尚未完成验证，已重新发送验证邮件" });
+      const code = createEmailVerification(existingUser.id);
+      await sendVerificationEmail(existingUser.email, code);
+      return NextResponse.json({
+        ok: true,
+        email: existingUser.email,
+        expiresInSeconds: 300,
+        message: "该邮箱尚未完成验证，已重新发送验证码",
+      });
     }
 
     const user = createUser(email, hashPassword(password));
-    const token = createEmailVerification(user.id);
-    await sendVerificationEmail(user.email, token);
-    return NextResponse.json({ ok: true, message: "注册成功，请查收验证邮件" }, { status: 201 });
+    const code = createEmailVerification(user.id);
+    await sendVerificationEmail(user.email, code);
+    return NextResponse.json(
+      {
+        ok: true,
+        email: user.email,
+        expiresInSeconds: 300,
+        message: "注册成功，请查收邮箱验证码",
+      },
+      { status: 201 }
+    );
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || "注册失败" }, { status: 500 });
   }

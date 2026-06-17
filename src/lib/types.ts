@@ -31,6 +31,18 @@ export interface SearchResult {
   pageSize: number;
 }
 
+export interface ImageAsset {
+  id: number;
+  companyId: string;
+  fileUrl: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+}
+
+export interface CommentImage extends ImageAsset {
+  commentId: number;
+}
+
 export interface Comment {
   id: number;
   companyId: string;
@@ -38,6 +50,7 @@ export interface Comment {
   rating: number; // 1-5
   content: string;
   createdAt: string;
+  images?: CommentImage[];
 }
 
 export interface RatingSummary {
@@ -48,6 +61,8 @@ export interface RatingSummary {
 export interface User {
   id: string;
   email: string;
+  nickname: string;
+  avatarUrl: string;
   emailVerified: boolean;
   createdAt: string;
 }
